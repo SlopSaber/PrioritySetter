@@ -40,15 +40,13 @@ namespace PrioritySetter
 
         private void SetPriority(object state)
         {
-            var thisProcess = Process.GetCurrentProcess();
+            using (var thisProcess = Process.GetCurrentProcess())
+            {
+                if (thisProcess.PriorityClass == Config.ProcessPriority) return;
 
-            if (thisProcess.PriorityClass == Config.ProcessPriority) return;
-
-            Logger.Warn($"Priority no longer at desired level. Refreshing!");
-
-            thisProcess.PriorityClass = Config.ProcessPriority;
-
-            Logger.Info($"Set priority to {thisProcess.PriorityClass}");
+                thisProcess.PriorityClass = Config.ProcessPriority;
+                Logger.Info($"Set priority to {thisProcess.PriorityClass}");
+            }
         }
 
         public class PrioritySetterConfig
