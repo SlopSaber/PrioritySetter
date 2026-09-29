@@ -114,7 +114,8 @@ namespace PrioritySetter
 
             public virtual string VrProcessNames { get; set; } =
                 "vrserver, vrcompositor, vrmonitor, vrdashboard, vrwebhelper, vrstartup, vrhomesteam, " +
-                "OVRServer_x64, OVRServer_x86, OVRServiceLauncher, OVRRedir, OculusDash, OculusClient";
+                "OVRServer_x64, OVRServer_x86, OVRServiceLauncher, OVRRedir, OculusDash, OculusClient, " +
+                "VirtualDesktop.Streamer";
         }
     }
 }
