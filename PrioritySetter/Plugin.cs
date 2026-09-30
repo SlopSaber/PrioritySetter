@@ -20,6 +20,9 @@ namespace PrioritySetter
         private readonly PrioritySetterConfig Config;
         private readonly Timer RefreshTimer;
         private readonly object RefreshLock = new object();
+        private int RefreshQueued;
+        private int RefreshRequested;
+        private int Stopped;
 
         [Init]
         public Plugin(IPALogger logger, Config config)
@@ -27,19 +30,49 @@ namespace PrioritySetter
             Config = config.Generated<PrioritySetterConfig>();
             Logger = logger;
 
-            SetPriority(null);
+            QueuePriorityRefresh(null);
 
             // Check processes started after the game, then refresh once per minute.
-            RefreshTimer = new Timer(SetPriority, null, 10000, 60000);
+            RefreshTimer = new Timer(QueuePriorityRefresh, null, 10000, 60000);
 
             // Workaround for windows setting normal priority on window changing focus
-            Application.focusChanged += (isFocused) => { if (isFocused) SetPriority(null); };
+            Application.focusChanged += OnFocusChanged;
         }
 
         [OnExit] 
         public void OnExit()
         {
+            Interlocked.Exchange(ref Stopped, 1);
+            Application.focusChanged -= OnFocusChanged;
             RefreshTimer.Dispose();
+        }
+
+        private void OnFocusChanged(bool isFocused)
+        {
+            if (isFocused) QueuePriorityRefresh(null);
+        }
+
+        private void QueuePriorityRefresh(object state)
+        {
+            if (Volatile.Read(ref Stopped) != 0) return;
+            Interlocked.Exchange(ref RefreshRequested, 1);
+            if (Interlocked.CompareExchange(ref RefreshQueued, 1, 0) != 0) return;
+            if (!ThreadPool.QueueUserWorkItem(RunPriorityRefresh)) Interlocked.Exchange(ref RefreshQueued, 0);
+        }
+
+        private void RunPriorityRefresh(object state)
+        {
+            try
+            {
+                while (Volatile.Read(ref Stopped) == 0 && Interlocked.Exchange(ref RefreshRequested, 0) != 0)
+                    SetPriority(state);
+            }
+            catch (Exception exception) { Logger.Warn($"Could not refresh process priorities: {exception.Message}"); }
+            finally
+            {
+                Interlocked.Exchange(ref RefreshQueued, 0);
+                if (Volatile.Read(ref RefreshRequested) != 0) QueuePriorityRefresh(null);
+            }
         }
 
         private void SetPriority(object state)
@@ -57,6 +90,7 @@ namespace PrioritySetter
                     var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                     foreach (var entry in (Config.VrProcessNames ?? string.Empty).Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
                     {
+                        if (Volatile.Read(ref Stopped) != 0) return;
                         var name = entry.Trim();
                         if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                             name = name.Substring(0, name.Length - 4);
