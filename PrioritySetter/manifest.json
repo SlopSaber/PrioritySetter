@@ -7,7 +7,7 @@
   "description": "The PrioritySetter mod for Beat Saber allows you to automatically adjust the priority of the game process to optimize performance",
   "gameVersion": "1.45.3",
   "dependsOn": {
-    "BSIPA": "^4.2.0"
+    "BSIPA": "^5.0.0"
   },
   "conflictsWith": {
     "PrioritySetter-Light": "^1.0.0"
