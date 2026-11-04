@@ -7,7 +7,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Threading;
-using UnityEngine;
 using IPALogger = IPA.Logging.Logger;
 
 namespace PrioritySetter
@@ -17,73 +16,62 @@ namespace PrioritySetter
     public class Plugin
     {
         private readonly IPALogger Logger;
-        private readonly PrioritySetterConfig Config;
-        private readonly Timer RefreshTimer;
-        private readonly object RefreshLock = new object();
 
         [Init]
         public Plugin(IPALogger logger, Config config)
         {
-            Config = config.Generated<PrioritySetterConfig>();
+            var settings = config.Generated<PrioritySetterConfig>();
             Logger = logger;
-
-            SetPriority(null);
-
-            // Check processes started after the game, then refresh once per minute.
-            RefreshTimer = new Timer(SetPriority, null, 10000, 60000);
-
-            // Workaround for windows setting normal priority on window changing focus
-            Application.focusChanged += (isFocused) => { if (isFocused) SetPriority(null); };
-        }
-
-        [OnExit] 
-        public void OnExit()
-        {
-            RefreshTimer.Dispose();
-        }
-
-        private void SetPriority(object state)
-        {
-            lock (RefreshLock)
+            var priority = settings.ProcessPriority;
+            int currentId;
+            using (var process = Process.GetCurrentProcess())
             {
-                var priority = Config.ProcessPriority;
-                using (var thisProcess = Process.GetCurrentProcess())
+                currentId = process.Id;
+                ApplyPriority(process, priority);
+            }
+
+            if (!settings.SetVrProcessPriority) return;
+            var processNames = settings.VrProcessNames;
+            ThreadPool.QueueUserWorkItem(_ => ApplyVrPriorities(priority, processNames, currentId));
+        }
+
+        private void ApplyVrPriorities(ProcessPriorityClass priority, string processNames, int currentId)
+        {
+            try
+            {
+                var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var entry in (processNames ?? string.Empty).Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
                 {
-                    var currentId = thisProcess.Id;
-                    ApplyPriority(thisProcess, priority);
+                    var name = entry.Trim();
+                    if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                        name = name.Substring(0, name.Length - 4);
 
-                    if (!Config.SetVrProcessPriority) return;
+                    if (name.Length == 0 || !names.Add(name)) continue;
 
-                    var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var entry in (Config.VrProcessNames ?? string.Empty).Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+                    try
                     {
-                        var name = entry.Trim();
-                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-                            name = name.Substring(0, name.Length - 4);
-
-                        if (name.Length == 0 || !names.Add(name)) continue;
-
-                        try
+                        foreach (var process in Process.GetProcessesByName(name))
                         {
-                            foreach (var process in Process.GetProcessesByName(name))
+                            using (process)
                             {
-                                using (process)
-                                {
-                                    if (process.Id != currentId)
-                                        ApplyPriority(process, priority);
-                                }
+                                if (process.Id != currentId)
+                                    ApplyPriority(process, priority);
                             }
                         }
-                        catch (Win32Exception ex)
-                        {
-                            Logger.Warn($"Could not enumerate {name} processes: {ex.Message}");
-                        }
-                        catch (InvalidOperationException ex)
-                        {
-                            Logger.Warn($"Could not enumerate {name} processes: {ex.Message}");
-                        }
+                    }
+                    catch (Win32Exception ex)
+                    {
+                        Logger.Warn($"Could not enumerate {name} processes: {ex.Message}");
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        Logger.Warn($"Could not enumerate {name} processes: {ex.Message}");
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"Could not apply startup VR process priorities: {ex.Message}");
             }
         }
 

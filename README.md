@@ -6,7 +6,9 @@ The PrioritySetter mod for Beat Saber allows you to adjust the priority of the g
 
 ## Configuration
 
-PrioritySetter also applies `ProcessPriority` to running SteamVR and Meta Quest Link/Oculus processes. It checks when Beat Saber starts, 10 seconds later, every 60 seconds, and when the game regains focus. New processes are picked up on the next check. A process that Windows does not allow Beat Saber to change is logged and skipped.
+PrioritySetter applies `ProcessPriority` once when Beat Saber starts. It does not check again on focus changes or run a refresh timer. If another program changes the priority later, PrioritySetter leaves that change alone.
+
+When `SetVrProcessPriority` is enabled, it also applies the configured priority to already-running SteamVR and Meta Quest Link/Oculus processes in one background startup pass. Processes started later and configuration changes take effect on the next game launch. A process that Windows does not allow Beat Saber to change is logged and skipped.
 
 `SetVrProcessPriority` defaults to `true`. Set it to `false` to change only Beat Saber. `VrProcessNames` is a comma- or semicolon-separated list of executable names. The default includes SteamVR's server, compositor, monitor, dashboard, web helper, startup, and Home processes; Oculus runtime, service launcher, redirector, dashboard, and client processes; and Virtual Desktop Streamer. Names are matched exactly without the optional `.exe` suffix. Edit the list to add another headset-specific process or remove processes you do not want changed.
 
